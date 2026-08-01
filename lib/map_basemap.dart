@@ -1,0 +1,1 @@
+enum MapBasemap { dark, satellite }
