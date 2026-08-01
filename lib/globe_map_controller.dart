@@ -23,6 +23,7 @@ class GlobeMapController extends ChangeNotifier {
   bool _styleIsReady = false;
   bool _userIsInteracting = false;
   bool _rotationSuspended = false;
+  bool _autoRotationDisabledForSession = false;
   bool _cameraUpdateInFlight = false;
   bool _disposed = false;
   bool _isChangingBasemap = false;
@@ -35,6 +36,7 @@ class GlobeMapController extends ChangeNotifier {
   bool get isChangingBasemap => _isChangingBasemap;
   String? get lastError => _lastError;
   bool get isRotationSuspended => _rotationSuspended;
+  bool get isAutoRotationDisabledForSession => _autoRotationDisabledForSession;
 
   void attach(MapboxMap map) {
     if (_disposed) return;
@@ -47,16 +49,16 @@ class GlobeMapController extends ChangeNotifier {
       await map.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
       await map.logo.updateSettings(
         LogoSettings(
-          position: OrnamentPosition.BOTTOM_RIGHT,
-          marginRight: 12,
-          marginBottom: 90,
+          position: OrnamentPosition.BOTTOM_LEFT,
+          marginLeft: 4,
+          marginBottom: 4,
         ),
       );
       await map.attribution.updateSettings(
         AttributionSettings(
           position: OrnamentPosition.BOTTOM_RIGHT,
-          marginRight: 12,
-          marginBottom: 64,
+          marginRight: 4,
+          marginBottom: 4,
           iconColor: const Color(0xFF7D8CA8).toARGB32(),
           clickable: true,
         ),
@@ -177,7 +179,16 @@ class GlobeMapController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void disableAutoRotationForSession() {
+    if (_disposed || _autoRotationDisabledForSession) return;
+    _autoRotationDisabledForSession = true;
+    _resumeTimer?.cancel();
+    _stopRotation();
+    notifyListeners();
+  }
+
   Future<void> flyToPlace(PlaceSearchResult place) async {
+    disableAutoRotationForSession();
     final map = _map;
     if (_disposed || map == null || !_styleIsReady) return;
 
@@ -287,7 +298,12 @@ class GlobeMapController extends ChangeNotifier {
 
   void _scheduleRotationResume() {
     _resumeTimer?.cancel();
-    if (!_appIsActive || !_styleIsReady || _rotationSuspended) return;
+    if (!_appIsActive ||
+        !_styleIsReady ||
+        _rotationSuspended ||
+        _autoRotationDisabledForSession) {
+      return;
+    }
     _resumeTimer = Timer(_resumeDelay, _startRotationIfAllowed);
   }
 
@@ -296,6 +312,7 @@ class GlobeMapController extends ChangeNotifier {
         !_appIsActive ||
         !_styleIsReady ||
         _rotationSuspended ||
+        _autoRotationDisabledForSession ||
         _userIsInteracting ||
         _map == null ||
         _rotationTimer?.isActive == true) {
@@ -321,6 +338,7 @@ class GlobeMapController extends ChangeNotifier {
         !_appIsActive ||
         !_styleIsReady ||
         _rotationSuspended ||
+        _autoRotationDisabledForSession ||
         _userIsInteracting ||
         _cameraUpdateInFlight) {
       return;

@@ -39,7 +39,7 @@ class PlaceSearchController extends ChangeNotifier {
 
   Future<PlaceSearchResult?> submit(String query) async {
     final normalized = query.trim();
-    if (_disposed || normalized.isEmpty || _loading) return null;
+    if (_disposed || normalized.isEmpty) return null;
 
     final requestId = ++_requestId;
     _loading = true;

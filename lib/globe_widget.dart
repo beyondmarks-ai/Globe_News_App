@@ -5,7 +5,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import 'article/article_summary_cache.dart';
 import 'article/news_detail_popup.dart';
-import 'basemap_selector.dart';
+import 'globe_top_controls.dart';
 import 'globe_map_controller.dart';
 import 'map_styles.dart';
 import 'place_search/expandable_place_search.dart';
@@ -34,6 +34,7 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
   late final TimelineMapLayerManager _timelineLayers;
   late final ArticleSummaryCache _articleSummaryCache;
   late final PlaceSearchController _placeSearchController;
+  final GlobalKey<ExpandablePlaceSearchState> _searchKey = GlobalKey();
   List<TimelineNewsItem>? _lastSyncedItems;
 
   @override
@@ -103,6 +104,7 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     final active = state == AppLifecycleState.resumed;
     _globeController.setAppActive(active);
     _timelineLayers.setAppActive(active);
+    if (!active) _searchKey.currentState?.dismissForBackground();
   }
 
   @override
@@ -115,123 +117,139 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
       ..removeListener(_onTimelineChanged)
       ..dispose();
     _timelineLayers.dispose();
+    _placeSearchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFF030712),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (_) => _globeController.onInteractionStart(),
-            onPointerUp: (_) => _globeController.onInteractionEnd(),
-            onPointerCancel: (_) => _globeController.onInteractionEnd(),
-            child: MapWidget(
-              key: const ValueKey('native-globe-map'),
-              styleUri: GlobeMapStyles.darkStyleUri,
-              viewport: CameraViewportState(
-                center: Point(coordinates: Position(0, 20)),
-                zoom: 1.5,
-                bearing: 0,
-                pitch: 0,
-              ),
-              onMapCreated: _onMapCreated,
-              onStyleLoadedListener: (_) => _onStyleLoaded(),
-              onCameraChangeListener: (event) =>
-                  _globeController.onCameraChanged(event.cameraState),
-              onScrollListener: (_) => _globeController.registerUserActivity(),
-              onZoomListener: (_) => _globeController.registerUserActivity(),
-            ),
-          ),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: SafeArea(
-              child: BasemapSelector(
-                selected: _globeController.basemap,
-                isBusy: _globeController.isChangingBasemap,
-                onSelected: _globeController.setBasemap,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 12,
-            left: 12,
-            child: SafeArea(
-              child: ExpandablePlaceSearch(
-                controller: _placeSearchController,
-                onSelected: _onPlaceSelected,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 8,
-            right: 8,
-            bottom: 12,
-            child: SafeArea(
-              top: false,
-              child: Center(
-                child: TimelineControls(controller: _timelineController),
-              ),
-            ),
-          ),
-          if (_timelineController.isInitialLoading)
-            const Center(
-              child: _StatusCard(
-                icon: SizedBox.square(
-                  dimension: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
+    return ListenableBuilder(
+      listenable: _placeSearchController,
+      builder: (context, child) => PopScope<Object?>(
+        canPop: !_placeSearchController.expanded,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _searchKey.currentState?.handleBack();
+        },
+        child: child!,
+      ),
+      child: ColoredBox(
+        color: const Color(0xFF030712),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (_) {
+                _searchKey.currentState?.handleMapTap();
+                _globeController.onInteractionStart();
+              },
+              onPointerUp: (_) => _globeController.onInteractionEnd(),
+              onPointerCancel: (_) => _globeController.onInteractionEnd(),
+              child: MapWidget(
+                key: const ValueKey('native-globe-map'),
+                styleUri: GlobeMapStyles.darkStyleUri,
+                viewport: CameraViewportState(
+                  center: Point(coordinates: Position(0, 20)),
+                  zoom: 1.5,
+                  bearing: 0,
+                  pitch: 0,
                 ),
-                message: 'Loading timeline news\u2026',
+                onMapCreated: _onMapCreated,
+                onStyleLoadedListener: (_) => _onStyleLoaded(),
+                onCameraChangeListener: (event) =>
+                    _globeController.onCameraChanged(event.cameraState),
+                onScrollListener: (_) =>
+                    _globeController.registerUserActivity(),
+                onZoomListener: (_) {
+                  _globeController.disableAutoRotationForSession();
+                  _globeController.registerUserActivity();
+                },
               ),
-            )
-          else if (_timelineController.isEmpty)
-            const Center(
-              child: _StatusCard(
-                icon: Icon(Icons.public_off_outlined),
-                message: 'No geolocated stories for this 15-minute slot.',
-              ),
-            )
-          else if (_timelineController.error != null &&
-              _timelineController.items.isEmpty)
-            Center(
-              child: _StatusCard(
-                icon: const Icon(Icons.cloud_off, color: Color(0xFFFBBF24)),
-                message: _timelineController.error!,
-                action: TextButton.icon(
-                  onPressed: _timelineController.load,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: GlobeTopControls(
+                    searchKey: _searchKey,
+                    searchController: _placeSearchController,
+                    onPlaceSelected: _onPlaceSelected,
+                    selectedBasemap: _globeController.basemap,
+                    isBasemapBusy: _globeController.isChangingBasemap,
+                    onBasemapSelected: _globeController.setBasemap,
+                  ),
                 ),
               ),
             ),
-          if (_timelineController.error != null &&
-              _timelineController.items.isNotEmpty)
             Positioned(
-              left: 12,
-              right: 12,
-              bottom: 82,
-              child: _ErrorBanner(
-                message: _timelineController.error!,
-                onRetry: _timelineController.load,
-                onDismiss: _timelineController.clearError,
+              left: 8,
+              right: 8,
+              bottom: 42,
+              child: SafeArea(
+                top: false,
+                child: Center(
+                  child: TimelineControls(controller: _timelineController),
+                ),
               ),
             ),
-          if (_globeController.lastError case final error?)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 82,
-              child: _ErrorBanner(
-                message: error,
-                onDismiss: _globeController.clearError,
+            if (_timelineController.isInitialLoading)
+              const Center(
+                child: _StatusCard(
+                  icon: SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  message: 'Loading timeline news\u2026',
+                ),
+              )
+            else if (_timelineController.isEmpty)
+              const Center(
+                child: _StatusCard(
+                  icon: Icon(Icons.public_off_outlined),
+                  message: 'No geolocated stories for this 15-minute slot.',
+                ),
+              )
+            else if (_timelineController.error != null &&
+                _timelineController.items.isEmpty)
+              Center(
+                child: _StatusCard(
+                  icon: const Icon(Icons.cloud_off, color: Color(0xFFFBBF24)),
+                  message: _timelineController.error!,
+                  action: TextButton.icon(
+                    onPressed: _timelineController.load,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ),
               ),
-            ),
-        ],
+            if (_timelineController.error != null &&
+                _timelineController.items.isNotEmpty)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 112,
+                child: _ErrorBanner(
+                  message: _timelineController.error!,
+                  onRetry: _timelineController.load,
+                  onDismiss: _timelineController.clearError,
+                ),
+              ),
+            if (_globeController.lastError case final error?)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 112,
+                child: _ErrorBanner(
+                  message: error,
+                  onDismiss: _globeController.clearError,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
