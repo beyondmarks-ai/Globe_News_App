@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import ipaddress
 import json
 import logging
@@ -10,6 +12,17 @@ import azure.functions as func
 import requests
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.blob import BlobServiceClient, ContentSettings
+
+from bidar_news.api import detail_payload, map_payload, parse_since
+from bidar_news.discovery import run_discovery
+from bidar_news.processor import decode_message, process_message
+from bidar_news.repository import CityNewsRepository
+from bidar_news.realtime import (
+    REALTIME_LANGUAGES,
+    REALTIME_VOICES,
+    create_realtime_client_secret,
+    source_id_from_public_id,
+)
 
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -185,9 +198,7 @@ def _download_article(url: str) -> tuple[str, str, str | None]:
         or ""
     ).strip()[:300]
     image_url = (
-        metadata.get("ogImage")
-        or metadata.get("twitterImage")
-        or metadata.get("image")
+        metadata.get("ogImage") or metadata.get("twitterImage") or metadata.get("image")
     )
     if not isinstance(image_url, str) or urlparse(image_url).scheme.lower() not in (
         "http",
@@ -310,7 +321,9 @@ def timeline_news_proxy(req: func.HttpRequest) -> func.HttpResponse:
         function_key = os.environ.get("TIMELINE_NEWS_FUNCTION_KEY", "")
         if not function_key:
             logging.error("TIMELINE_NEWS_FUNCTION_KEY is not configured")
-            return _response(json.dumps({"error": "Timeline service is unavailable"}), 503, "MISS")
+            return _response(
+                json.dumps({"error": "Timeline service is unavailable"}), 503, "MISS"
+            )
 
         upstream = requests.get(
             _UPSTREAM_URL,
@@ -336,10 +349,14 @@ def timeline_news_proxy(req: func.HttpRequest) -> func.HttpResponse:
         return _response(normalized, 200, "MISS")
     except requests.Timeout:
         logging.warning("Timeline upstream timed out")
-        return _response(json.dumps({"error": "Timeline service timed out"}), 504, "MISS")
+        return _response(
+            json.dumps({"error": "Timeline service timed out"}), 504, "MISS"
+        )
     except Exception:
         logging.exception("Timeline proxy request failed")
-        return _response(json.dumps({"error": "Timeline service is unavailable"}), 503, "MISS")
+        return _response(
+            json.dumps({"error": "Timeline service is unavailable"}), 503, "MISS"
+        )
 
 
 @app.timer_trigger(
@@ -415,3 +432,170 @@ def article_details(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         logging.exception("Article enrichment failed")
         return _article_response({"error": "Article enrichment failed"}, 502)
+
+
+def _city_response(payload: dict, status: int = 200) -> func.HttpResponse:
+    return func.HttpResponse(
+        body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        status_code=status,
+        mimetype="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Accept, Content-Type",
+            "Cache-Control": "public, max-age=120, stale-if-error=3600",
+        },
+    )
+
+
+def _talk_response(payload: dict, status: int = 200) -> func.HttpResponse:
+    return func.HttpResponse(
+        body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        status_code=status,
+        mimetype="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Accept, Content-Type",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.timer_trigger(
+    schedule="0 */10 * * * *",
+    arg_name="timer",
+    run_on_startup=True,
+    use_monitor=True,
+)
+def discover_vijaya_karnataka_bidar(timer: func.TimerRequest) -> None:
+    del timer
+    try:
+        result = run_discovery()
+        logging.info("Bidar discovery completed: %s", result)
+    except Exception:
+        logging.exception("Bidar discovery failed")
+
+
+@app.service_bus_queue_trigger(
+    arg_name="message",
+    queue_name="bidar-vk-articles",
+    connection="BIDAR_SERVICE_BUS_CONNECTION",
+)
+def ingest_vijaya_karnataka_article(message: func.ServiceBusMessage) -> None:
+    payload = decode_message(message.get_body())
+    result = process_message(payload)
+    logging.info("Bidar article %s: %s", payload.get("sourceArticleId"), result)
+
+
+@app.route(
+    route="admin/city-news/discover",
+    methods=["POST"],
+    auth_level=func.AuthLevel.FUNCTION,
+)
+def trigger_city_news_discovery(req: func.HttpRequest) -> func.HttpResponse:
+    del req
+    try:
+        return _city_response(run_discovery())
+    except Exception:
+        logging.exception("Manual Bidar discovery failed")
+        return _city_response({"error": "Discovery failed"}, 500)
+
+
+@app.route(route="city-news/map", methods=["GET", "OPTIONS"])
+def city_news_map(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _city_response({}, 204)
+    try:
+        since = parse_since(req.params.get("since"))
+    except (TypeError, ValueError):
+        return _city_response(
+            {"error": "since must be an ISO-8601 timestamp with timezone"}, 400
+        )
+    try:
+        return _city_response(map_payload(CityNewsRepository(), since))
+    except Exception:
+        logging.exception("City-news map request failed")
+        return _city_response({"error": "City news is unavailable"}, 503)
+
+
+@app.route(
+    route="city-news/{article_id:regex(^bidar-vk-[0-9]+$)}",
+    methods=["GET", "OPTIONS"],
+)
+def city_news_detail(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _city_response({}, 204)
+    public_id = str(req.route_params.get("article_id", ""))
+    if not public_id.startswith("bidar-vk-") or not public_id[9:].isdigit():
+        return _city_response({"error": "Article not found"}, 404)
+    try:
+        document = CityNewsRepository().get(f"vk:{public_id[9:]}")
+        if document is None:
+            return _city_response({"error": "Article not found"}, 404)
+        return _city_response(detail_payload(document))
+    except Exception:
+        logging.exception("City-news detail request failed")
+        return _city_response({"error": "City news is unavailable"}, 503)
+
+
+@app.route(route="talk-news/session", methods=["POST", "OPTIONS"])
+def create_talk_news_session(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _talk_response({}, 204)
+    try:
+        body = req.get_json()
+    except ValueError:
+        return _talk_response({"error": "Invalid request"}, 400)
+    if not isinstance(body, dict):
+        return _talk_response({"error": "Invalid request"}, 400)
+    language = str(body.get("language") or "auto")
+    voice = str(body.get("voice") or "coral").lower()
+    if language not in REALTIME_LANGUAGES or voice not in REALTIME_VOICES:
+        return _talk_response({"error": "Invalid voice preferences"}, 400)
+    source_id = source_id_from_public_id(body.get("articleId"))
+    try:
+        document = CityNewsRepository().get(source_id) if source_id else None
+        if document is None:
+            article_url = _validated_public_url(body.get("url"))
+            title = str(body.get("title") or "").strip()[:300]
+            article_text = ""
+            if article_url is not None:
+                try:
+                    scraped_title, article_text, _ = _download_article(article_url)
+                    title = scraped_title or title
+                except Exception:
+                    logging.warning(
+                        "Talk-news Firecrawl fallback unavailable for %s",
+                        article_url,
+                    )
+            known = {
+                "source": str(body.get("source") or "Unknown source")[:200],
+                "place": str(body.get("place") or "")[:200],
+                "country": str(body.get("country") or "")[:100],
+                "tone": str(body.get("tone") or "0")[:40],
+            }
+            metadata = "\n".join(f"{key}: {value}" for key, value in known.items())
+            document = {
+                "source": known["source"],
+                "headlineEnglish": title,
+                "articleBody": article_text
+                or (
+                    "The complete article could not be extracted. Only these "
+                    f"verified timeline fields are available:\n{metadata}"
+                ),
+                "where": ", ".join(
+                    value for value in (known["place"], known["country"]) if value
+                ),
+            }
+        if not str(document.get("articleBody") or "").strip():
+            return _talk_response({"error": "Article is not ready"}, 404)
+        return _talk_response(
+            create_realtime_client_secret(document, language, voice)
+        )
+    except requests.Timeout:
+        logging.warning("Talk-news session creation timed out")
+        return _talk_response({"error": "Voice service is unavailable"}, 504)
+    except Exception:
+        logging.exception("Talk-news session creation failed")
+        return _talk_response({"error": "Voice service is unavailable"}, 502)

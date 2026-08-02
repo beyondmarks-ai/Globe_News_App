@@ -74,7 +74,13 @@ The public Flutter app calls:
 ```text
 GET  /api/timeline-news?date=YYYY-MM-DD&time=HH:mm
 POST /api/article-details
+GET  /api/city-news/map?since=ISO-8601-UTC
+GET  /api/city-news/{id}
 ```
+
+The city-news feed currently ingests the authorized Vijaya Karnataka Bidar section every ten minutes through Service Bus. Location-verified stories are merged into the existing GPU-rendered Flutter dot source, while uncertain locations remain available in the backend without an invented globe coordinate.
+
+Door Drishti OCR and YouTube ingestion are intentionally deferred.
 
 Protected upstream credentials remain in Azure Function App settings. For local
 backend development, copy

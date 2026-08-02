@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../timeline/timeline_news_item.dart';
+import '../talk_news/talk_news_sheet.dart';
 import 'article_details.dart';
 import 'article_details_api.dart';
 import 'article_language_selector.dart';
@@ -40,6 +41,7 @@ Future<void> showNewsDetailPopup({
               constraints: const BoxConstraints(maxWidth: 720, maxHeight: 820),
               child: NewsDetailPopup(
                 controller: controller,
+                apiBaseUrl: apiBaseUrl,
                 onClose: () => Navigator.pop(dialogContext),
               ),
             ),
@@ -63,6 +65,7 @@ Future<void> showNewsDetailPopup({
           snap: true,
           builder: (context, scrollController) => NewsDetailPopup(
             controller: controller,
+            apiBaseUrl: apiBaseUrl,
             scrollController: scrollController,
             showDragHandle: true,
             onClose: () => Navigator.pop(sheetContext),
@@ -83,6 +86,7 @@ class NewsDetailPopup extends StatelessWidget {
     this.scrollController,
     this.showDragHandle = false,
     this.launcher,
+    this.apiBaseUrl = '',
   });
 
   final ArticleSummaryController controller;
@@ -90,6 +94,7 @@ class NewsDetailPopup extends StatelessWidget {
   final ScrollController? scrollController;
   final bool showDragHandle;
   final ArticleLauncher? launcher;
+  final String apiBaseUrl;
 
   Future<void> _openOriginal(BuildContext context) async {
     final uri = validatedHttpUri(controller.item.url);
@@ -173,6 +178,15 @@ class NewsDetailPopup extends StatelessWidget {
                         child: _SummaryBody(controller: controller),
                       ),
                       _Footer(
+                        talkEnabled:
+                            supportsTalkToNews(controller.item) &&
+                            apiBaseUrl.trim().isNotEmpty,
+                        onTalk: () => showTalkNewsSheet(
+                          context: context,
+                          item: controller.item,
+                          apiBaseUrl: apiBaseUrl,
+                          title: controller.details?.title ?? '',
+                        ),
                         originalEnabled:
                             validatedHttpUri(controller.item.url) != null,
                         onOpenOriginal: () => _openOriginal(context),
@@ -607,11 +621,15 @@ class _SummarySection extends StatelessWidget {
 
 class _Footer extends StatelessWidget {
   const _Footer({
+    required this.talkEnabled,
+    required this.onTalk,
     required this.originalEnabled,
     required this.onOpenOriginal,
     required this.onClose,
   });
 
+  final bool talkEnabled;
+  final VoidCallback onTalk;
   final bool originalEnabled;
   final VoidCallback onOpenOriginal;
   final VoidCallback onClose;
@@ -628,6 +646,41 @@ class _Footer extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
+        if (talkEnabled) ...[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0284C7), Color(0xFF4F46E5)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x553B82F6),
+                  blurRadius: 18,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: FilledButton.icon(
+              key: const Key('talk-to-news-button'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: onTalk,
+              icon: const Icon(Icons.graphic_eq_rounded),
+              label: const Text(
+                'Talk to this news',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Row(
           children: [
             Expanded(

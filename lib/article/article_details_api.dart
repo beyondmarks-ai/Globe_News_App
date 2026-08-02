@@ -57,6 +57,15 @@ class ArticleDetailsApi implements ArticleDetailsClient {
         ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
     final uri = Uri.parse('$root/api/article-details');
+    final cityId = cityNewsIdFromArticleUri(articleUri);
+    if (language == ArticleLanguage.english && cityId != null) {
+      final cityDetails = await _fetchCityDetails(client, root, cityId);
+      if (cityDetails != null) {
+        if (identical(client, _activeClient)) _activeClient = null;
+        client.close();
+        return cityDetails;
+      }
+    }
 
     try {
       final response = await client
@@ -105,6 +114,30 @@ class ArticleDetailsApi implements ArticleDetailsClient {
     }
   }
 
+  Future<ArticleDetails?> _fetchCityDetails(
+    http.Client client,
+    String root,
+    String cityId,
+  ) async {
+    try {
+      final response = await client
+          .get(
+            Uri.parse('$root/api/city-news/$cityId'),
+            headers: const {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      return ArticleDetails.fromJson(
+        decoded.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    } catch (_) {
+      if (_disposed || !identical(client, _activeClient)) rethrow;
+      return null;
+    }
+  }
+
   @override
   void cancel() {
     _activeClient?.close();
@@ -117,4 +150,13 @@ class ArticleDetailsApi implements ArticleDetailsClient {
     _disposed = true;
     cancel();
   }
+}
+
+String? cityNewsIdFromArticleUri(Uri uri) {
+  if (uri.host != 'vijaykarnataka.com' &&
+      uri.host != 'www.vijaykarnataka.com') {
+    return null;
+  }
+  final match = RegExp(r'/articleshow/(\d+)\.cms$').firstMatch(uri.path);
+  return match == null ? null : 'bidar-vk-${match.group(1)}';
 }

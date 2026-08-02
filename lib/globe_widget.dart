@@ -103,7 +103,6 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final active = state == AppLifecycleState.resumed;
     _globeController.setAppActive(active);
-    _timelineLayers.setAppActive(active);
     if (!active) _searchKey.currentState?.dismissForBackground();
   }
 
