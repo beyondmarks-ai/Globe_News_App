@@ -1,0 +1,8 @@
+azure-functions
+azure-cosmos
+requests
+pandas
+azure-search-documents
+azure-core
+openai
+python-dotenv

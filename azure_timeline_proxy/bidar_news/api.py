@@ -33,6 +33,7 @@ def map_payload(repository: CityNewsRepository, since: str) -> dict:
                 "color": document.get("color", "yellow"),
                 "url": document.get("canonicalUrl"),
                 "source": document.get("source", "Vijaya Karnataka"),
+                "headline": document.get("headlineEnglish") or document.get("headlineKannada"),
                 "has_embedding": bool(document.get("hasEmbedding", False)),
                 "ai_ready": bool(document.get("aiReady", False)),
                 "pulse_strength": document.get("pulseStrength", 1),

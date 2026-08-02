@@ -15,6 +15,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 
 from bidar_news.api import detail_payload, map_payload, parse_since
 from bidar_news.discovery import run_discovery
+from bidar_news.headlines import attach_indexed_headlines
 from bidar_news.processor import decode_message, process_message
 from bidar_news.repository import CityNewsRepository
 from bidar_news.realtime import (
@@ -132,6 +133,17 @@ def _normalized_timeline_bytes(payload: bytes) -> bytes:
     return json.dumps(records, ensure_ascii=False, separators=(",", ":")).encode(
         "utf-8"
     )
+
+
+def _enriched_timeline_bytes(payload: bytes) -> bytes:
+    records = json.loads(_normalized_timeline_bytes(payload))
+    records = attach_indexed_headlines(
+        records,
+        os.environ.get('AZURE_SEARCH_ENDPOINT', ''),
+        os.environ.get('AZURE_SEARCH_INDEX', ''),
+        os.environ.get('AZURE_SEARCH_KEY', ''),
+    )
+    return json.dumps(records, ensure_ascii=False).encode('utf-8')
 
 
 def _validated_public_url(value: object) -> str | None:
@@ -298,7 +310,7 @@ def timeline_news_proxy(req: func.HttpRequest) -> func.HttpResponse:
         blob = _cache_blob(date_value, time_value)
         try:
             cached = blob.download_blob().readall()
-            normalized = _normalized_timeline_bytes(cached)
+            normalized = _enriched_timeline_bytes(cached)
             if normalized != cached:
                 blob.upload_blob(
                     normalized,
@@ -311,7 +323,7 @@ def timeline_news_proxy(req: func.HttpRequest) -> func.HttpResponse:
 
         if req.params.get("prefer_cached") == "1":
             try:
-                latest = _normalized_timeline_bytes(
+                latest = _enriched_timeline_bytes(
                     _latest_cache_blob().download_blob().readall()
                 )
                 return _response(latest, 200, "FALLBACK")
@@ -339,7 +351,7 @@ def timeline_news_proxy(req: func.HttpRequest) -> func.HttpResponse:
                 "MISS",
             )
 
-        normalized = _normalized_timeline_bytes(upstream.content)
+        normalized = _enriched_timeline_bytes(upstream.content)
         blob.upload_blob(
             normalized,
             overwrite=True,
@@ -375,7 +387,7 @@ def preload_latest_timeline(timer: func.TimerRequest) -> None:
     try:
         blob = _cache_blob(date_value, time_value)
         try:
-            normalized = _normalized_timeline_bytes(blob.download_blob().readall())
+            normalized = _enriched_timeline_bytes(blob.download_blob().readall())
         except ResourceNotFoundError:
             function_key = os.environ.get("TIMELINE_NEWS_FUNCTION_KEY", "")
             if not function_key:
@@ -390,7 +402,7 @@ def preload_latest_timeline(timer: func.TimerRequest) -> None:
                 timeout=(10, 180),
             )
             upstream.raise_for_status()
-            normalized = _normalized_timeline_bytes(upstream.content)
+            normalized = _enriched_timeline_bytes(upstream.content)
             blob.upload_blob(
                 normalized,
                 overwrite=True,

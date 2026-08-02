@@ -38,6 +38,19 @@ void main() {
     expect(item.pulseStrength, 1.4);
   });
 
+  test('accepts headline and title variants for grid cards', () {
+    expect(
+      TimelineNewsItem.tryParse(
+        base()..['headline'] = 'Bidar update',
+      )!.headline,
+      'Bidar update',
+    );
+    expect(
+      TimelineNewsItem.tryParse(base()..['title'] = 'World update')!.headline,
+      'World update',
+    );
+  });
+
   test('accepts supported boolean representations', () {
     for (final value in [true, 1, 'true', '1']) {
       final item = TimelineNewsItem.tryParse(

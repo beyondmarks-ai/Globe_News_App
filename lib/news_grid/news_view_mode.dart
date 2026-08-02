@@ -1,0 +1,1 @@
+enum NewsViewMode { globe, grid }

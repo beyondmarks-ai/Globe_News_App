@@ -8,6 +8,9 @@ import 'article/news_detail_popup.dart';
 import 'globe_top_controls.dart';
 import 'globe_map_controller.dart';
 import 'map_styles.dart';
+import 'news_grid/news_grid_view.dart';
+import 'news_grid/news_view_mode.dart';
+import 'news_grid/news_view_toggle.dart';
 import 'place_search/expandable_place_search.dart';
 import 'place_search/place_search_api.dart';
 import 'place_search/place_search_controller.dart';
@@ -22,7 +25,9 @@ const timelineApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const _mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
 
 class GlobeWidget extends StatefulWidget {
-  const GlobeWidget({super.key});
+  const GlobeWidget({this.rotationSuspended = false, super.key});
+
+  final bool rotationSuspended;
 
   @override
   State<GlobeWidget> createState() => _GlobeWidgetState();
@@ -36,11 +41,14 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
   late final PlaceSearchController _placeSearchController;
   final GlobalKey<ExpandablePlaceSearchState> _searchKey = GlobalKey();
   List<TimelineNewsItem>? _lastSyncedItems;
+  NewsViewMode _viewMode = NewsViewMode.globe;
 
   @override
   void initState() {
     super.initState();
-    _globeController = GlobeMapController()..addListener(_onGlobeChanged);
+    _globeController = GlobeMapController();
+    _globeController.setRotationSuspended(widget.rotationSuspended);
+    _globeController.addListener(_onGlobeChanged);
     _timelineController = TimelineController(
       api: TimelineNewsApi(baseUrl: timelineApiBaseUrl),
     )..addListener(_onTimelineChanged);
@@ -51,6 +59,14 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     _timelineLayers = TimelineMapLayerManager(onItemTapped: _showNewsItem);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_timelineController.load());
+  }
+
+  @override
+  void didUpdateWidget(covariant GlobeWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rotationSuspended != widget.rotationSuspended) {
+      _globeController.setRotationSuspended(widget.rotationSuspended);
+    }
   }
 
   void _onGlobeChanged() {
@@ -81,8 +97,15 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
         cache: _articleSummaryCache,
       );
     } finally {
-      _globeController.setRotationSuspended(false);
+      _globeController.setRotationSuspended(_viewMode == NewsViewMode.grid);
     }
+  }
+
+  void _setViewMode(NewsViewMode mode) {
+    if (_viewMode == mode) return;
+    _searchKey.currentState?.handleMapTap();
+    setState(() => _viewMode = mode);
+    _globeController.setRotationSuspended(mode == NewsViewMode.grid);
   }
 
   void _onMapCreated(MapboxMap map) {
@@ -125,9 +148,15 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     return ListenableBuilder(
       listenable: _placeSearchController,
       builder: (context, child) => PopScope<Object?>(
-        canPop: !_placeSearchController.expanded,
+        canPop:
+            !_placeSearchController.expanded && _viewMode == NewsViewMode.globe,
         onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _searchKey.currentState?.handleBack();
+          if (didPop) return;
+          if (_placeSearchController.expanded) {
+            _searchKey.currentState?.handleBack();
+          } else {
+            _setViewMode(NewsViewMode.globe);
+          }
         },
         child: child!,
       ),
@@ -165,37 +194,68 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                 },
               ),
             ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: _viewMode == NewsViewMode.grid
+                  ? NewsGridView(
+                      key: const ValueKey('news-grid-surface'),
+                      items: _timelineController.items,
+                      displayDate: _timelineController.selection.displayDate,
+                      displayTime: _timelineController.selection.displayTime,
+                      isLoading: _timelineController.isLoading,
+                      error: _timelineController.error,
+                      onRefresh: _timelineController.load,
+                      onItemSelected: _showNewsItem,
+                    )
+                  : const SizedBox.expand(
+                      key: ValueKey('globe-overlay-surface'),
+                    ),
+            ),
+            if (_viewMode == NewsViewMode.globe)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: GlobeTopControls(
+                      searchKey: _searchKey,
+                      searchController: _placeSearchController,
+                      onPlaceSelected: _onPlaceSelected,
+                      selectedBasemap: _globeController.basemap,
+                      isBasemapBusy: _globeController.isChangingBasemap,
+                      onBasemapSelected: _globeController.setBasemap,
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
+              left: 8,
+              right: 8,
+              bottom: 34,
               child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: GlobeTopControls(
-                    searchKey: _searchKey,
-                    searchController: _placeSearchController,
-                    onPlaceSelected: _onPlaceSelected,
-                    selectedBasemap: _globeController.basemap,
-                    isBasemapBusy: _globeController.isChangingBasemap,
-                    onBasemapSelected: _globeController.setBasemap,
+                top: false,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NewsViewToggle(
+                        selected: _viewMode,
+                        onSelected: _setViewMode,
+                      ),
+                      const SizedBox(height: 8),
+                      TimelineControls(controller: _timelineController),
+                    ],
                   ),
                 ),
               ),
             ),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 42,
-              child: SafeArea(
-                top: false,
-                child: Center(
-                  child: TimelineControls(controller: _timelineController),
-                ),
-              ),
-            ),
-            if (_timelineController.isInitialLoading)
+            if (_viewMode == NewsViewMode.globe &&
+                _timelineController.isInitialLoading)
               const Center(
                 child: _StatusCard(
                   icon: SizedBox.square(
@@ -205,14 +265,16 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                   message: 'Loading timeline news\u2026',
                 ),
               )
-            else if (_timelineController.isEmpty)
+            else if (_viewMode == NewsViewMode.globe &&
+                _timelineController.isEmpty)
               const Center(
                 child: _StatusCard(
                   icon: Icon(Icons.public_off_outlined),
                   message: 'No geolocated stories for this 15-minute slot.',
                 ),
               )
-            else if (_timelineController.error != null &&
+            else if (_viewMode == NewsViewMode.globe &&
+                _timelineController.error != null &&
                 _timelineController.items.isEmpty)
               Center(
                 child: _StatusCard(
@@ -225,7 +287,8 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            if (_timelineController.error != null &&
+            if (_viewMode == NewsViewMode.globe &&
+                _timelineController.error != null &&
                 _timelineController.items.isNotEmpty)
               Positioned(
                 left: 12,
@@ -237,16 +300,17 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                   onDismiss: _timelineController.clearError,
                 ),
               ),
-            if (_globeController.lastError case final error?)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 112,
-                child: _ErrorBanner(
-                  message: error,
-                  onDismiss: _globeController.clearError,
+            if (_viewMode == NewsViewMode.globe)
+              if (_globeController.lastError case final error?)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 112,
+                  child: _ErrorBanner(
+                    message: error,
+                    onDismiss: _globeController.clearError,
+                  ),
                 ),
-              ),
           ],
         ),
       ),

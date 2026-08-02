@@ -12,6 +12,7 @@ class TimelineNewsItem {
     required this.hasEmbedding,
     required this.aiReady,
     required this.pulseStrength,
+    this.headline = '',
   });
 
   static const minPulseStrength = 0.5;
@@ -29,6 +30,7 @@ class TimelineNewsItem {
   final bool hasEmbedding;
   final bool aiReady;
   final double pulseStrength;
+  final String headline;
 
   bool get pulseReady => hasEmbedding && aiReady;
 
@@ -67,6 +69,12 @@ class TimelineNewsItem {
       hasEmbedding: _asBool(json['has_embedding'] ?? json['hasEmbedding']),
       aiReady: _asBool(json['ai_ready'] ?? json['aiReady']),
       pulseStrength: strength,
+      headline: _asText(
+        json['headline'] ??
+            json['title'] ??
+            json['headlineEnglish'] ??
+            json['headlineKannada'],
+      ),
     );
   }
 

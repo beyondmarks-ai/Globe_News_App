@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
+import 'app_intro.dart';
 import 'globe_widget.dart';
 
 const mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
@@ -31,15 +32,34 @@ class GlobeNewsApp extends StatelessWidget {
   }
 }
 
-class _GlobeHome extends StatelessWidget {
+class _GlobeHome extends StatefulWidget {
   const _GlobeHome();
+
+  @override
+  State<_GlobeHome> createState() => _GlobeHomeState();
+}
+
+class _GlobeHomeState extends State<_GlobeHome> {
+  bool _introFinished = false;
+
+  void _finishIntro() {
+    if (mounted && !_introFinished) setState(() => _introFinished = true);
+  }
 
   @override
   Widget build(BuildContext context) {
     if (mapboxAccessToken.isEmpty) {
       return const _MissingTokenScreen();
     }
-    return const Scaffold(body: GlobeWidget());
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          GlobeWidget(rotationSuspended: !_introFinished),
+          if (!_introFinished) AppIntroOverlay(onFinished: _finishIntro),
+        ],
+      ),
+    );
   }
 }
 
