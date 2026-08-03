@@ -45,6 +45,8 @@ class FcmSender:
                         "priority": "high",
                         "notification": {
                             "channel_id": "nearby_news",
+                            "icon": "ic_stat_globe_news",
+                            "color": "#A8F000",
                             "sound": "default",
                             "default_vibrate_timings": True,
                         },
