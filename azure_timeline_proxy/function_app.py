@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import ipaddress
 import json
 import logging
@@ -18,6 +19,15 @@ from bidar_news.discovery import run_discovery
 from bidar_news.headlines import attach_indexed_headlines
 from bidar_news.processor import decode_message, process_message
 from bidar_news.repository import CityNewsRepository
+from news_alerts.models import (
+    AlertValidationError,
+    parse_alert,
+    secret_hash,
+    valid_credentials,
+)
+from news_alerts.processor import process_timeline_alerts
+from news_alerts.repository import NewsAlertRepository
+
 from bidar_news.realtime import (
     REALTIME_LANGUAGES,
     REALTIME_VOICES,
@@ -67,6 +77,86 @@ def _article_response(payload: dict, status: int) -> func.HttpResponse:
             "Cache-Control": "no-store",
         },
     )
+
+
+def _alert_response(payload: dict, status: int = 200) -> func.HttpResponse:
+    return func.HttpResponse(
+        body=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        status_code=status,
+        mimetype="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": (
+                "Accept, Content-Type, X-Installation-ID, X-Device-Secret"
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.route(route="news-alerts", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def news_alerts(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _alert_response({}, 204)
+    repository = NewsAlertRepository()
+    if req.method == "POST":
+        try:
+            incoming = parse_alert(req.get_json())
+        except (ValueError, AlertValidationError):
+            return _alert_response({"error": "Invalid alert settings"}, 400)
+        existing = repository.get(incoming["installationId"])
+        if existing is not None and not hmac.compare_digest(
+            str(existing.get("deviceSecretHash") or ""),
+            incoming["deviceSecretHash"],
+        ):
+            return _alert_response({"error": "Invalid device credentials"}, 403)
+        for key in (
+            "createdAt",
+            "seenStoryIds",
+            "pendingItems",
+            "deliveryTimes",
+            "lastDeliveredAt",
+        ):
+            if existing is not None and key in existing:
+                incoming[key] = existing[key]
+        incoming.setdefault("createdAt", datetime.now(timezone.utc).isoformat())
+        repository.upsert(incoming)
+        return _alert_response({"saved": True}, 200)
+
+    installation_id = str(
+        req.headers.get("X-Installation-ID") or ""
+    ).lower()
+    device_secret = str(req.headers.get("X-Device-Secret") or "").lower()
+    if not valid_credentials(installation_id, device_secret):
+        return _alert_response({"error": "Invalid device credentials"}, 403)
+    existing = repository.get(installation_id)
+    if existing is None:
+        return _alert_response({"error": "Alert not found"}, 404)
+    if not hmac.compare_digest(
+        str(existing.get("deviceSecretHash") or ""),
+        secret_hash(device_secret),
+    ):
+        return _alert_response({"error": "Invalid device credentials"}, 403)
+    if req.method == "DELETE":
+        repository.delete(installation_id)
+        return _alert_response({"deleted": True}, 200)
+    safe = {
+        key: existing.get(key)
+        for key in (
+            "center",
+            "locationLabel",
+            "locationType",
+            "scopeType",
+            "boundingBox",
+            "radiusMeters",
+            "language",
+            "mode",
+            "quietHours",
+            "enabled",
+        )
+    }
+    return _alert_response(safe, 200)
 
 
 def _valid_slot(date_value: str | None, time_value: str | None) -> bool:
@@ -409,6 +499,14 @@ def preload_latest_timeline(timer: func.TimerRequest) -> None:
                 content_settings=ContentSettings(content_type="application/json"),
             )
         _store_latest(normalized)
+        try:
+            alert_result = process_timeline_alerts(
+                json.loads(normalized),
+                slot,
+            )
+            logging.info("News alert processing: %s", alert_result)
+        except Exception:
+            logging.exception("News alert processing failed")
         logging.info("Preloaded timeline slot %s %s UTC", date_value, time_value)
     except Exception:
         logging.exception("Timeline preloader failed")

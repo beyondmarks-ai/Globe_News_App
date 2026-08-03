@@ -37,6 +37,11 @@ class GlobeMapController extends ChangeNotifier {
   String? get lastError => _lastError;
   bool get isRotationSuspended => _rotationSuspended;
   bool get isAutoRotationDisabledForSession => _autoRotationDisabledForSession;
+  ({double latitude, double longitude})? get currentCenter {
+    final center = _latestCamera?.center.coordinates;
+    if (center == null) return null;
+    return (latitude: center.lat.toDouble(), longitude: center.lng.toDouble());
+  }
 
   void attach(MapboxMap map) {
     if (_disposed) return;

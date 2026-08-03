@@ -12,6 +12,7 @@ native 3D Earth using `mapbox_maps_flutter`.
 - Expandable place search with smooth camera flight
 - AI article summaries in English, Kannada, Hindi, and Urdu
 - Responsive news-detail popup with source links
+- City/state news notifications with optional radius and AI-refined grouped headlines
 - Public Azure Functions proxy with timeline caching and article enrichment
 
 ## Repository layout
@@ -76,6 +77,7 @@ GET  /api/timeline-news?date=YYYY-MM-DD&time=HH:mm
 POST /api/article-details
 GET  /api/city-news/map?since=ISO-8601-UTC
 GET  /api/city-news/{id}
+GET, POST, DELETE /api/news-alerts
 ```
 
 The city-news feed currently ingests the authorized Vijaya Karnataka Bidar section every ten minutes through Service Bus. Location-verified stories are merged into the existing GPU-rendered Flutter dot source, while uncertain locations remain available in the backend without an invented globe coordinate.
@@ -121,6 +123,8 @@ GitHub Actions runs the same checks on pushes to `main` and pull requests.
 ## Security
 
 - Runtime tokens are supplied with Dart defines and are not hardcoded.
+- FCM sender credentials remain in Azure Key Vault and are resolved through the Function App managed identity.
+- Nearby alerts save a selected city/state bounding area or an optional fixed radius; the app does not request background location.
 - `.env`, Azure local settings, Python environments, build output, IDE files,
   Android signing keys, and service credential files are ignored.
 - Article enrichment is server-side; protected keys are never shipped in the

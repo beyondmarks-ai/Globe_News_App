@@ -7,6 +7,7 @@ This anonymous Azure Functions app exposes:
 - `GET /api/city-news/map?since=ISO-8601-UTC`
 - `GET /api/city-news/{id}`
 - `POST /api/talk-news/session`
+- `GET, POST, DELETE /api/news-alerts`
 
 Authorized Vijaya Karnataka Bidar articles are discovered every ten minutes and sent to the `bidar-vk-articles` Service Bus queue. JSON-LD extraction is used first; Firecrawl is only a fallback when ordinary HTML is incomplete.
 
@@ -23,6 +24,8 @@ Azure Blob Storage by UTC slot.
 - `AZURE_OPENAI_KEY`: Azure OpenAI API key
 - `AZURE_OPENAI_CHAT_DEPLOYMENT`: chat deployment name
 - `AZURE_OPENAI_REALTIME_DEPLOYMENT`: realtime deployment name (defaults to `gpt-realtime-1.5`)
+- `NEWS_ALERTS_COSMOS_CONTAINER`: subscription container (defaults to `news_alerts`)
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: FCM v1 sender credential; production uses an Azure Key Vault reference
 
 Bidar settings:
 
@@ -49,3 +52,5 @@ Run tests with `python -m unittest discover -s tests -v`.
 Copy `local.settings.example.json` to `local.settings.json` for local
 development. Never commit the populated file or expose these settings to the
 Flutter application.
+
+Area alerts are matched after each 15-minute timeline preload. The backend validates either a Mapbox city/state bounding area or an optional fixed-radius subscription, groups multiple stories, enforces quiet hours and delivery limits, caches AI-refined headlines per language, and sends through FCM HTTP v1. The mobile app requests notification permission only when the user enables an alert and does not request background location.

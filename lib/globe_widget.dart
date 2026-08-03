@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
@@ -11,6 +12,10 @@ import 'map_styles.dart';
 import 'news_grid/news_grid_view.dart';
 import 'news_grid/news_view_mode.dart';
 import 'news_grid/news_view_toggle.dart';
+import 'notifications/news_alert_api.dart';
+import 'notifications/news_alert_controller.dart';
+import 'notifications/news_alert_sheet.dart';
+import 'notifications/news_notification_service.dart';
 import 'place_search/expandable_place_search.dart';
 import 'place_search/place_search_api.dart';
 import 'place_search/place_search_controller.dart';
@@ -39,6 +44,10 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
   late final TimelineMapLayerManager _timelineLayers;
   late final ArticleSummaryCache _articleSummaryCache;
   late final PlaceSearchController _placeSearchController;
+  late final NewsAlertController _newsAlertController;
+  StreamSubscription<NewsNotificationAction>? _notificationOpenedSubscription;
+  StreamSubscription<RemoteMessage>? _foregroundMessageSubscription;
+  NewsNotificationAction? _pendingNotificationAction;
   final GlobalKey<ExpandablePlaceSearchState> _searchKey = GlobalKey();
   List<TimelineNewsItem>? _lastSyncedItems;
   NewsViewMode _viewMode = NewsViewMode.globe;
@@ -56,6 +65,18 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     _placeSearchController = PlaceSearchController(
       api: PlaceSearchApi(accessToken: _mapboxAccessToken),
     );
+    _newsAlertController = NewsAlertController(
+      api: NewsAlertApi(baseUrl: timelineApiBaseUrl),
+    )..addListener(_onNewsAlertChanged);
+    unawaited(_newsAlertController.load());
+    _notificationOpenedSubscription = NewsNotificationService.instance.opened
+        .listen(_handleNotificationAction);
+    _foregroundMessageSubscription = NewsNotificationService
+        .instance
+        .foregroundMessages
+        .listen(_showForegroundNotification);
+    _pendingNotificationAction = NewsNotificationService.instance
+        .takeInitialAction();
     _timelineLayers = TimelineMapLayerManager(onItemTapped: _showNewsItem);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_timelineController.load());
@@ -73,11 +94,22 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  void _onNewsAlertChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onTimelineChanged() {
     final items = _timelineController.items;
     if (!identical(items, _lastSyncedItems)) {
       _lastSyncedItems = items;
       unawaited(_timelineLayers.setItems(items));
+    }
+    final pending = _pendingNotificationAction;
+    if (pending != null && items.isNotEmpty) {
+      _pendingNotificationAction = null;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handleNotificationAction(pending),
+      );
     }
     if (mounted) setState(() {});
   }
@@ -117,6 +149,52 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     unawaited(_globeController.flyToPlace(place));
   }
 
+  Future<void> _showNewsAlerts() async {
+    _searchKey.currentState?.handleMapTap();
+    _globeController.setRotationSuspended(true);
+    try {
+      await showNewsAlertSheet(
+        context: context,
+        controller: _newsAlertController,
+        mapboxAccessToken: _mapboxAccessToken,
+      );
+    } finally {
+      _globeController.setRotationSuspended(_viewMode == NewsViewMode.grid);
+    }
+  }
+
+  void _handleNotificationAction(NewsNotificationAction action) {
+    if (!mounted) return;
+    final storyId = action.storyId;
+    if (storyId != null) {
+      for (final item in _timelineController.items) {
+        if (item.id == storyId) {
+          _showNewsItem(item);
+          return;
+        }
+      }
+    }
+    _setViewMode(NewsViewMode.grid);
+  }
+
+  void _showForegroundNotification(RemoteMessage message) {
+    if (!mounted) return;
+    final notification = message.notification;
+    final text = notification?.body ?? notification?.title;
+    if (text == null || text.trim().isEmpty) return;
+    final action = NewsNotificationAction.fromMessage(message);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => _handleNotificationAction(action),
+        ),
+      ),
+    );
+  }
+
   Future<void> _onStyleLoaded() async {
     await _globeController.onStyleLoaded();
     await _timelineLayers.onStyleLoaded();
@@ -140,6 +218,11 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
       ..dispose();
     _timelineLayers.dispose();
     _placeSearchController.dispose();
+    _newsAlertController
+      ..removeListener(_onNewsAlertChanged)
+      ..dispose();
+    unawaited(_notificationOpenedSubscription?.cancel());
+    unawaited(_foregroundMessageSubscription?.cancel());
     super.dispose();
   }
 
@@ -229,6 +312,8 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                       selectedBasemap: _globeController.basemap,
                       isBasemapBusy: _globeController.isChangingBasemap,
                       onBasemapSelected: _globeController.setBasemap,
+                      alertsEnabled: _newsAlertController.alert != null,
+                      onAlertsPressed: _showNewsAlerts,
                     ),
                   ),
                 ),

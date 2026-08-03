@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"news-map-backend","appId":"1:438846015772:android:4af09b5f8e88f27befd2d9","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"news-map-backend","configurations":{"android":"1:438846015772:android:4af09b5f8e88f27befd2d9"}}}}}}

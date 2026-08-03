@@ -4,3 +4,4 @@ azure-servicebus==7.14.2
 azure-storage-blob==12.26.0
 beautifulsoup4==4.13.4
 requests==2.32.4
+google-auth==2.40.3

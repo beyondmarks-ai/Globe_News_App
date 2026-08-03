@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:globe_news_beta/globe_top_controls.dart';
 import 'package:globe_news_beta/map_basemap.dart';
 import 'package:globe_news_beta/place_search/expandable_place_search.dart';
@@ -28,6 +31,45 @@ void main() {
     expect(result.preferredZoom, 7.2);
   });
 
+  test('permanent area search requests and parses administrative bounds', () async {
+    Uri? requested;
+    final api = PlaceSearchApi(
+      accessToken: 'public-token',
+      permanentStorage: true,
+      client: MockClient((request) async {
+        requested = request.url;
+        return http.Response(
+          jsonEncode({
+            'features': [
+              {
+                'properties': {
+                  'name': 'Bengaluru',
+                  'feature_type': 'place',
+                  'coordinates': {
+                    'longitude': 77.591301,
+                    'latitude': 12.979101,
+                  },
+                  'bbox': [77.325376, 12.733355, 77.783794, 13.234974],
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(api.dispose);
+
+    final results = await api.searchMany('Bengaluru');
+
+    expect(requested?.queryParameters['permanent'], 'true');
+    expect(results.single.boundingBox, [
+      77.325376,
+      12.733355,
+      77.783794,
+      13.234974,
+    ]);
+  });
   test('rejects invalid geocoding coordinates', () {
     final result = PlaceSearchResult.fromJson({
       'properties': {
@@ -305,6 +347,8 @@ Future<void> _pumpTopControls(
     selectedBasemap: MapBasemap.dark,
     isBasemapBusy: false,
     onBasemapSelected: onBasemapSelected ?? (_) {},
+    alertsEnabled: false,
+    onAlertsPressed: () {},
   );
 
   await tester.pumpWidget(

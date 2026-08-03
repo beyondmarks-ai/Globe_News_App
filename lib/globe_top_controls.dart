@@ -13,6 +13,8 @@ class GlobeTopControls extends StatelessWidget {
     required this.selectedBasemap,
     required this.isBasemapBusy,
     required this.onBasemapSelected,
+    required this.alertsEnabled,
+    required this.onAlertsPressed,
     this.searchKey,
     super.key,
   });
@@ -22,6 +24,8 @@ class GlobeTopControls extends StatelessWidget {
   final MapBasemap selectedBasemap;
   final bool isBasemapBusy;
   final ValueChanged<MapBasemap> onBasemapSelected;
+  final bool alertsEnabled;
+  final VoidCallback onAlertsPressed;
   final GlobalKey<ExpandablePlaceSearchState>? searchKey;
 
   @override
@@ -44,6 +48,8 @@ class GlobeTopControls extends StatelessWidget {
           selected: selectedBasemap,
           isBusy: isBasemapBusy,
           onSelected: onBasemapSelected,
+          alertsEnabled: alertsEnabled,
+          onAlertsPressed: onAlertsPressed,
         ),
       ],
     );

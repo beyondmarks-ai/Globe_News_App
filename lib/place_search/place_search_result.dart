@@ -5,6 +5,7 @@ class PlaceSearchResult {
     required this.latitude,
     required this.featureType,
     this.description = '',
+    this.boundingBox,
   });
 
   final String name;
@@ -12,6 +13,11 @@ class PlaceSearchResult {
   final double longitude;
   final double latitude;
   final String featureType;
+
+  /// Mapbox order: min longitude, min latitude, max longitude, max latitude.
+  final List<double>? boundingBox;
+
+  bool get hasAdministrativeBounds => boundingBox != null;
 
   double get preferredZoom => switch (featureType) {
     'country' => 3.2,
@@ -83,6 +89,24 @@ class PlaceSearchResult {
       longitude: lon,
       latitude: lat,
       featureType: properties['feature_type']?.toString() ?? '',
+      boundingBox: _boundingBox(properties['bbox'] ?? json['bbox']),
     );
+  }
+
+  static List<double>? _boundingBox(Object? value) {
+    if (value is! List || value.length != 4) return null;
+    final values = value
+        .map((item) => item is num ? item.toDouble() : double.nan)
+        .toList(growable: false);
+    if (values.any((item) => !item.isFinite) ||
+        values[0] < -180 ||
+        values[2] > 180 ||
+        values[1] < -90 ||
+        values[3] > 90 ||
+        values[0] >= values[2] ||
+        values[1] >= values[3]) {
+      return null;
+    }
+    return List.unmodifiable(values);
   }
 }

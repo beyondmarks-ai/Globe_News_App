@@ -8,11 +8,15 @@ class BasemapSelector extends StatelessWidget {
     required this.selected,
     required this.isBusy,
     required this.onSelected,
+    required this.alertsEnabled,
+    required this.onAlertsPressed,
   });
 
   final MapBasemap selected;
   final bool isBusy;
   final ValueChanged<MapBasemap> onSelected;
+  final bool alertsEnabled;
+  final VoidCallback onAlertsPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,18 @@ class BasemapSelector extends StatelessWidget {
             selected: selected == MapBasemap.satellite,
             enabled: !isBusy,
             onPressed: () => onSelected(MapBasemap.satellite),
+          ),
+          Container(width: 1, height: 28, color: Colors.white12),
+          _BasemapButton(
+            tooltip: alertsEnabled
+                ? 'Nearby alert active'
+                : 'Nearby news alerts',
+            icon: alertsEnabled
+                ? Icons.notifications_active_outlined
+                : Icons.notifications_none_rounded,
+            selected: alertsEnabled,
+            enabled: true,
+            onPressed: onAlertsPressed,
           ),
           if (isBusy)
             const Padding(
