@@ -31,45 +31,48 @@ void main() {
     expect(result.preferredZoom, 7.2);
   });
 
-  test('permanent area search requests and parses administrative bounds', () async {
-    Uri? requested;
-    final api = PlaceSearchApi(
-      accessToken: 'public-token',
-      permanentStorage: true,
-      client: MockClient((request) async {
-        requested = request.url;
-        return http.Response(
-          jsonEncode({
-            'features': [
-              {
-                'properties': {
-                  'name': 'Bengaluru',
-                  'feature_type': 'place',
-                  'coordinates': {
-                    'longitude': 77.591301,
-                    'latitude': 12.979101,
+  test(
+    'permanent area search requests and parses administrative bounds',
+    () async {
+      Uri? requested;
+      final api = PlaceSearchApi(
+        accessToken: 'public-token',
+        permanentStorage: true,
+        client: MockClient((request) async {
+          requested = request.url;
+          return http.Response(
+            jsonEncode({
+              'features': [
+                {
+                  'properties': {
+                    'name': 'Bengaluru',
+                    'feature_type': 'place',
+                    'coordinates': {
+                      'longitude': 77.591301,
+                      'latitude': 12.979101,
+                    },
+                    'bbox': [77.325376, 12.733355, 77.783794, 13.234974],
                   },
-                  'bbox': [77.325376, 12.733355, 77.783794, 13.234974],
                 },
-              },
-            ],
-          }),
-          200,
-        );
-      }),
-    );
-    addTearDown(api.dispose);
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(api.dispose);
 
-    final results = await api.searchMany('Bengaluru');
+      final results = await api.searchMany('Bengaluru');
 
-    expect(requested?.queryParameters['permanent'], 'true');
-    expect(results.single.boundingBox, [
-      77.325376,
-      12.733355,
-      77.783794,
-      13.234974,
-    ]);
-  });
+      expect(requested?.queryParameters['permanent'], 'true');
+      expect(results.single.boundingBox, [
+        77.325376,
+        12.733355,
+        77.783794,
+        13.234974,
+      ]);
+    },
+  );
   test('rejects invalid geocoding coordinates', () {
     final result = PlaceSearchResult.fromJson({
       'properties': {
