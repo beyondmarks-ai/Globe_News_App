@@ -71,7 +71,7 @@ class NewsGridView extends StatelessWidget {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 190),
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 250),
                 sliver: SliverList.separated(
                   itemCount: items.length,
                   itemBuilder: (context, index) => Center(

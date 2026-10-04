@@ -25,18 +25,21 @@ class ArticleSummaryController extends ChangeNotifier {
   ArticleLanguage _language;
   ArticleSummaryStatus _status = ArticleSummaryStatus.idle;
   ArticleDetails? _details;
+  String? _error;
   bool _disposed = false;
   int _requestGeneration = 0;
 
   ArticleLanguage get language => _language;
   ArticleSummaryStatus get status => _status;
   ArticleDetails? get details => _details;
+  String? get error => _error;
   bool get isLoading => _status == ArticleSummaryStatus.loading;
 
   Future<void> load({ArticleLanguage? language}) async {
     if (_disposed) return;
     if (language != null) _language = language;
     final generation = ++_requestGeneration;
+    _error = null;
     _api.cancel();
 
     final key = ArticleSummaryCacheKey.forRequest(item.url, _language);
@@ -57,12 +60,15 @@ class ArticleSummaryController extends ChangeNotifier {
         language: _language,
       );
       if (_disposed || generation != _requestGeneration) return;
-      _cache.put(key, result);
+      if (!result.isSourceExcerpt) _cache.put(key, result);
       _details = result;
       _status = ArticleSummaryStatus.ready;
-    } catch (_) {
+    } catch (error) {
       if (_disposed || generation != _requestGeneration) return;
       _details = null;
+      _error = error is ArticleDetailsApiException
+          ? error.message
+          : 'This article could not be summarized.';
       _status = ArticleSummaryStatus.error;
     } finally {
       if (!_disposed && generation == _requestGeneration) notifyListeners();

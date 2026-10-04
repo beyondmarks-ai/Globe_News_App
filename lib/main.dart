@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import 'app_intro.dart';
+import 'auth/auth_client.dart';
+import 'auth/auth_gate.dart';
+import 'notifications/news_alert_controller.dart';
 import 'firebase_options.dart';
 import 'globe_widget.dart';
 import 'notifications/news_notification_service.dart';
@@ -39,13 +42,23 @@ class GlobeNewsApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF2563EB),
         scaffoldBackgroundColor: const Color(0xFF030712),
       ),
-      home: const _GlobeHome(),
+      home: mapboxAccessToken.isEmpty
+          ? const _MissingTokenScreen()
+          : AuthGate(
+              client: FirebaseAuthClient(),
+              apiBaseUrl: timelineApiBaseUrl,
+              mapboxToken: mapboxAccessToken,
+              builder: (context, alerts, onAccount) =>
+                  _GlobeHome(alerts: alerts, onAccount: onAccount),
+            ),
     );
   }
 }
 
 class _GlobeHome extends StatefulWidget {
-  const _GlobeHome();
+  const _GlobeHome({required this.alerts, required this.onAccount});
+  final NewsAlertController alerts;
+  final VoidCallback onAccount;
 
   @override
   State<_GlobeHome> createState() => _GlobeHomeState();
@@ -67,7 +80,11 @@ class _GlobeHomeState extends State<_GlobeHome> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          GlobeWidget(rotationSuspended: !_introFinished),
+          GlobeWidget(
+            rotationSuspended: !_introFinished,
+            newsAlerts: widget.alerts,
+            onAccountPressed: widget.onAccount,
+          ),
           if (!_introFinished) AppIntroOverlay(onFinished: _finishIntro),
         ],
       ),

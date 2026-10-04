@@ -3,16 +3,15 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from azure.cosmos import CosmosClient, exceptions
+from azure.cosmos import exceptions
+from service_clients import cosmos_client
 
 from .config import CITY_PARTITION, COSMOS_CONTAINER, COSMOS_DATABASE
 
 
 class CityNewsRepository:
     def __init__(self):
-        endpoint = os.environ["BIDAR_COSMOS_ENDPOINT"]
-        key = os.environ["BIDAR_COSMOS_KEY"]
-        client = CosmosClient(endpoint, credential=key)
+        client = cosmos_client()
         database = client.get_database_client(COSMOS_DATABASE)
         self._container = database.get_container_client(COSMOS_CONTAINER)
 

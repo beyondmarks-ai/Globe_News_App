@@ -53,10 +53,10 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBWVuMzN4WFd0nBlZl6AmElboKOCsw1vGk',
-    appId: '1:438846015772:android:4af09b5f8e88f27befd2d9',
-    messagingSenderId: '438846015772',
-    projectId: 'news-map-backend',
-    storageBucket: 'news-map-backend.firebasestorage.app',
+    apiKey: 'AIzaSyDJLmLKHykhY4OSuR-_JIv8WcZxUECTXds',
+    appId: '1:821371128901:android:ed0e27cd9ac0a56e9de72c',
+    messagingSenderId: '821371128901',
+    projectId: 'globe-news-ecafc',
+    storageBucket: 'globe-news-ecafc.firebasestorage.app',
   );
 }

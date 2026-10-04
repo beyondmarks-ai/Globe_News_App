@@ -16,6 +16,7 @@ class GlobeTopControls extends StatelessWidget {
     required this.alertsEnabled,
     required this.onAlertsPressed,
     this.searchKey,
+    this.onAccountPressed,
     super.key,
   });
 
@@ -27,11 +28,18 @@ class GlobeTopControls extends StatelessWidget {
   final bool alertsEnabled;
   final VoidCallback onAlertsPressed;
   final GlobalKey<ExpandablePlaceSearchState>? searchKey;
+  final VoidCallback? onAccountPressed;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        if (onAccountPressed != null)
+          IconButton.filledTonal(
+            tooltip: 'Your account',
+            onPressed: onAccountPressed,
+            icon: const Icon(Icons.person_outline),
+          ),
         Expanded(
           child: Align(
             alignment: Alignment.centerRight,

@@ -8,6 +8,7 @@ This anonymous Azure Functions app exposes:
 - `GET /api/city-news/{id}`
 - `POST /api/talk-news/session`
 - `GET, POST, DELETE /api/news-alerts`
+- `POST /api/news-alerts/test` (saved-device credentials required)
 
 Authorized Vijaya Karnataka Bidar articles are discovered every ten minutes and sent to the `bidar-vk-articles` Service Bus queue. JSON-LD extraction is used first; Firecrawl is only a fallback when ordinary HTML is incomplete.
 
@@ -23,9 +24,11 @@ Azure Blob Storage by UTC slot.
 - `AZURE_OPENAI_ENDPOINT`: Azure OpenAI resource endpoint
 - `AZURE_OPENAI_KEY`: Azure OpenAI API key
 - `AZURE_OPENAI_CHAT_DEPLOYMENT`: chat deployment name
+- `NEWS_OPENAI_ENDPOINT`, `NEWS_OPENAI_KEY`, `NEWS_OPENAI_CHAT_DEPLOYMENT`: optional overrides used only for summaries/notification headlines, preserving other AI consumers
 - `AZURE_OPENAI_REALTIME_DEPLOYMENT`: realtime deployment name (defaults to `gpt-realtime-1.5`)
 - `NEWS_ALERTS_COSMOS_CONTAINER`: subscription container (defaults to `news_alerts`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: FCM v1 sender credential; production uses an Azure Key Vault reference
+- `FIREBASE_PROJECT_ID`: must match the mobile Firebase project (`globe-news-ecafc`)
 
 Bidar settings:
 
@@ -53,4 +56,7 @@ Copy `local.settings.example.json` to `local.settings.json` for local
 development. Never commit the populated file or expose these settings to the
 Flutter application.
 
-Area alerts are matched after each 15-minute timeline preload. The backend validates either a Mapbox city/state bounding area or an optional fixed-radius subscription, groups multiple stories, enforces quiet hours and delivery limits, caches AI-refined headlines per language, and sends through FCM HTTP v1. The mobile app requests notification permission only when the user enables an alert and does not request background location.
+Area alerts are matched by a separate five-minute delivery timer against the latest cached feed, refreshed by the 15-minute timeline preloader. The backend validates either a Mapbox city/state bounding area or an optional fixed-radius subscription, groups multiple stories, enforces quiet hours and delivery limits, caches AI-refined headlines per language, and sends through FCM HTTP v1. AI enrichment failures fall back to the original headline. The mobile app requests notification permission only when the user enables an alert and does not request background location.
+
+For the summary extraction changes, timeout safeguards, deployment requirements,
+and real-device push acceptance checks, see [backend reliability](../docs/backend-reliability.md).

@@ -13,6 +13,27 @@ import 'package:globe_news_beta/timeline/timeline_news_item.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'source excerpt is never labelled as an AI summary or translation',
+    (tester) async {
+      final controller = _controller(
+        _SuccessClient(
+          ArticleDetails.fromJson({
+            'title': 'Original title',
+            'whatHappened': 'Actual publisher text.',
+            'summaryKind': 'source_excerpt',
+          }),
+        ),
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      await _pumpPopup(tester, controller);
+      expect(find.text('Source excerpt'), findsOneWidget);
+      expect(find.text('AI summary'), findsNothing);
+      expect(find.text('Original source text'), findsOneWidget);
+    },
+  );
+
   testWidgets('shows timeline information and loading state immediately', (
     tester,
   ) async {

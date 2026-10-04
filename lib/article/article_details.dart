@@ -8,6 +8,7 @@ class ArticleDetails {
     required this.why,
     required this.how,
     this.imageUrl,
+    this.isSourceExcerpt = false,
   });
 
   final String title;
@@ -18,6 +19,7 @@ class ArticleDetails {
   final String why;
   final String how;
   final String? imageUrl;
+  final bool isSourceExcerpt;
 
   Uri? get imageUri => validatedHttpUri(imageUrl);
 
@@ -32,6 +34,7 @@ class ArticleDetails {
       why: _text(json['why']),
       how: _text(json['how']),
       imageUrl: validatedHttpUri(image) == null ? null : image,
+      isSourceExcerpt: json['summaryKind'] == 'source_excerpt',
     );
   }
 

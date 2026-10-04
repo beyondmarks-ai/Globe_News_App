@@ -131,7 +131,7 @@ class _NewsAlertSheetState extends State<NewsAlertSheet> {
     });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool enableNotifications = true}) async {
     final place = _place;
     if (place == null) {
       setState(() => _searchError = 'Select a city or state first.');
@@ -142,20 +142,21 @@ class _NewsAlertSheetState extends State<NewsAlertSheet> {
             place.hasAdministrativeBounds
         ? _scope
         : NewsAlertScope.customRadius;
-    final saved = await widget.controller.save(
-      NewsAlert(
-        latitude: place.latitude,
-        longitude: place.longitude,
-        locationLabel: place.name,
-        locationType: place.featureType,
-        scope: scope,
-        boundingBox: place.boundingBox,
-        radiusMeters: _radius,
-        language: _language,
-        mode: _mode,
-        quietHoursEnabled: _quietHours,
-      ),
+    final selection = NewsAlert(
+      latitude: place.latitude,
+      longitude: place.longitude,
+      locationLabel: place.description.isEmpty ? place.name : place.description,
+      locationType: place.featureType,
+      scope: scope,
+      boundingBox: place.boundingBox,
+      radiusMeters: _radius,
+      language: _language,
+      mode: _mode,
+      quietHoursEnabled: _quietHours,
     );
+    final saved = enableNotifications
+        ? await widget.controller.save(selection)
+        : await widget.controller.saveWithoutNotifications(selection);
     if (!mounted || !saved) return;
     Navigator.of(context).pop();
     final coverage = scope == NewsAlertScope.customRadius
@@ -163,7 +164,11 @@ class _NewsAlertSheetState extends State<NewsAlertSheet> {
         : 'across ${place.name}';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('News alerts enabled $coverage.'),
+        content: Text(
+          enableNotifications
+              ? 'News alerts enabled $coverage.'
+              : 'News area saved. Notifications are off.',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -309,7 +314,7 @@ class _NewsAlertSheetState extends State<NewsAlertSheet> {
                 key: const Key('save-news-alert'),
                 onPressed: widget.controller.busy || _place == null
                     ? null
-                    : _save,
+                    : () => _save(),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(54),
                   backgroundColor: const Color(0xFF2563EB),
@@ -327,12 +332,19 @@ class _NewsAlertSheetState extends State<NewsAlertSheet> {
                       )
                     : const Icon(Icons.notifications_active_outlined),
                 label: Text(
-                  widget.controller.alert == null
+                  !widget.controller.notificationsEnabled
                       ? 'Enable area alerts'
                       : 'Update area alert',
                 ),
               ),
-              if (widget.controller.alert != null)
+              TextButton(
+                key: const Key('save-area-only'),
+                onPressed: widget.controller.busy || _place == null
+                    ? null
+                    : () => _save(enableNotifications: false),
+                child: const Text('Save area without notifications'),
+              ),
+              if (widget.controller.alert?.enabled == true)
                 TextButton(
                   onPressed: widget.controller.busy
                       ? null

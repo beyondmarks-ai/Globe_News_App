@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 
 import requests
 from azure.core.exceptions import ResourceNotFoundError
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import ContentSettings
+from service_clients import blob_service
 
 _LANGUAGE_NAMES = {
     "en-US": "English",
@@ -32,8 +33,9 @@ def notification_headline(story: dict, language: str) -> str:
     if not original:
         place = str(story.get("place") or story.get("country") or "your area")
         return f"News update from {place}"[:90]
-    cache = _cache_blob(story, language)
+    cache = None
     try:
+        cache = _cache_blob(story, language)
         payload = json.loads(cache.download_blob().readall())
         value = str(payload.get("headline") or "").strip()
         if value:
@@ -55,23 +57,17 @@ def notification_headline(story: dict, language: str) -> str:
 
 
 def _cache_blob(story: dict, language: str):
-    service = BlobServiceClient.from_connection_string(
-        os.environ["AzureWebJobsStorage"]
-    )
+    service = blob_service()
     container = service.get_container_client("notification-headlines")
-    try:
-        container.create_container()
-    except Exception:
-        pass
     basis = f"{story.get('id')}|{story.get('url')}|{language}"
     key = hashlib.sha256(basis.encode("utf-8")).hexdigest()
     return container.get_blob_client(f"{language}/{key}.json")
 
 
 def _refine(original: str, story: dict, language: str) -> str:
-    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
-    api_key = os.environ.get("AZURE_OPENAI_KEY", "")
-    deployment = os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT", "")
+    endpoint = (os.environ.get("NEWS_OPENAI_ENDPOINT") or os.environ.get("AZURE_OPENAI_ENDPOINT", "")).rstrip("/")
+    api_key = os.environ.get("NEWS_OPENAI_KEY") or os.environ.get("AZURE_OPENAI_KEY") or os.environ.get("AZURE_OPENAI_API_KEY", "")
+    deployment = os.environ.get("NEWS_OPENAI_CHAT_DEPLOYMENT") or os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT") or os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "")
     if not endpoint or not api_key or not deployment:
         return original[:90]
     language_name = _LANGUAGE_NAMES.get(language, "English")
@@ -103,10 +99,9 @@ def _refine(original: str, story: dict, language: str) -> str:
                     ),
                 },
             ],
-            "temperature": 0.1,
-            "max_tokens": 100,
+            "max_completion_tokens": 400,
         },
-        timeout=(5, 20),
+        timeout=(3, 5),
     )
     response.raise_for_status()
     value = response.json()["choices"][0]["message"]["content"].strip()

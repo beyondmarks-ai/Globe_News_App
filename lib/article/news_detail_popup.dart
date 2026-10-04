@@ -178,6 +178,7 @@ class NewsDetailPopup extends StatelessWidget {
                         child: _SummaryBody(controller: controller),
                       ),
                       _Footer(
+                        isSourceExcerpt: details?.isSourceExcerpt ?? false,
                         talkEnabled:
                             supportsTalkToNews(controller.item) &&
                             apiBaseUrl.trim().isNotEmpty,
@@ -257,16 +258,21 @@ class _Header extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFF60A5FA)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.auto_awesome,
                       size: 14,
                       color: Color(0xFF93C5FD),
                     ),
-                    SizedBox(width: 5),
-                    Text('AI summary', style: TextStyle(fontSize: 12)),
+                    const SizedBox(width: 5),
+                    Text(
+                      details?.isSourceExcerpt == true
+                          ? 'Source excerpt'
+                          : 'AI summary',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -416,7 +422,10 @@ class _SummaryBody extends StatelessWidget {
   Widget build(BuildContext context) => switch (controller.status) {
     ArticleSummaryStatus.idle ||
     ArticleSummaryStatus.loading => const _SummaryLoading(),
-    ArticleSummaryStatus.error => _SummaryError(onRetry: controller.retry),
+    ArticleSummaryStatus.error => _SummaryError(
+      onRetry: controller.retry,
+      message: controller.error ?? 'This article could not be summarized.',
+    ),
     ArticleSummaryStatus.ready => _SummaryReady(details: controller.details!),
   };
 }
@@ -496,8 +505,9 @@ class _LoadingSurfaceState extends State<_LoadingSurface>
 }
 
 class _SummaryError extends StatelessWidget {
-  const _SummaryError({required this.onRetry});
+  const _SummaryError({required this.onRetry, required this.message});
   final VoidCallback onRetry;
+  final String message;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -512,7 +522,7 @@ class _SummaryError extends StatelessWidget {
       children: [
         const Icon(Icons.info_outline, color: Color(0xFFFCA5A5)),
         const SizedBox(width: 12),
-        const Expanded(child: Text('This article could not be summarized.')),
+        Expanded(child: Text(message)),
         TextButton.icon(
           key: const Key('article-retry-button'),
           onPressed: onRetry,
@@ -535,7 +545,9 @@ class _SummaryReady extends StatelessWidget {
     children: [
       _SummarySection(
         key: const Key('summary-what-happened'),
-        label: 'What happened',
+        label: details.isSourceExcerpt
+            ? 'Original source text'
+            : 'What happened',
         value: details.whatHappened,
         icon: Icons.bolt_rounded,
       ),
@@ -621,6 +633,7 @@ class _SummarySection extends StatelessWidget {
 
 class _Footer extends StatelessWidget {
   const _Footer({
+    required this.isSourceExcerpt,
     required this.talkEnabled,
     required this.onTalk,
     required this.originalEnabled,
@@ -629,6 +642,7 @@ class _Footer extends StatelessWidget {
   });
 
   final bool talkEnabled;
+  final bool isSourceExcerpt;
   final VoidCallback onTalk;
   final bool originalEnabled;
   final VoidCallback onOpenOriginal;
@@ -640,9 +654,15 @@ class _Footer extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'AI-generated summary. Verify important details with the original source.',
-          style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
+        Text(
+          isSourceExcerpt
+              ? 'Original-language source excerpt. AI summary and translation are currently unavailable.'
+              : 'AI-generated summary. Verify important details with the original source.',
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 12,
+            height: 1.35,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),

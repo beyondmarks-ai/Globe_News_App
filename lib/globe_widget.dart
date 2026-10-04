@@ -25,14 +25,22 @@ import 'timeline/timeline_controls.dart';
 import 'timeline/timeline_map_layer_manager.dart';
 import 'timeline/timeline_news_api.dart';
 import 'timeline/timeline_news_item.dart';
+import 'news_demo/news_demo_screen.dart';
 
 const timelineApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const _mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
 
 class GlobeWidget extends StatefulWidget {
-  const GlobeWidget({this.rotationSuspended = false, super.key});
+  const GlobeWidget({
+    this.rotationSuspended = false,
+    this.newsAlerts,
+    this.onAccountPressed,
+    super.key,
+  });
 
   final bool rotationSuspended;
+  final NewsAlertController? newsAlerts;
+  final VoidCallback? onAccountPressed;
 
   @override
   State<GlobeWidget> createState() => _GlobeWidgetState();
@@ -65,10 +73,11 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     _placeSearchController = PlaceSearchController(
       api: PlaceSearchApi(accessToken: _mapboxAccessToken),
     );
-    _newsAlertController = NewsAlertController(
-      api: NewsAlertApi(baseUrl: timelineApiBaseUrl),
-    )..addListener(_onNewsAlertChanged);
-    unawaited(_newsAlertController.load());
+    _newsAlertController =
+        widget.newsAlerts ??
+        NewsAlertController(api: NewsAlertApi(baseUrl: timelineApiBaseUrl));
+    _newsAlertController.addListener(_onNewsAlertChanged);
+    if (widget.newsAlerts == null) unawaited(_newsAlertController.load());
     _notificationOpenedSubscription = NewsNotificationService.instance.opened
         .listen(_handleNotificationAction);
     _foregroundMessageSubscription = NewsNotificationService
@@ -149,6 +158,22 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
     unawaited(_globeController.flyToPlace(place));
   }
 
+  Future<void> _showTopicSearch() async {
+    _searchKey.currentState?.handleMapTap();
+    _globeController.setRotationSuspended(true);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => const NewsDemoScreen(apiBaseUrl: timelineApiBaseUrl),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        _globeController.setRotationSuspended(_viewMode == NewsViewMode.grid);
+      }
+    }
+  }
+
   Future<void> _showNewsAlerts() async {
     _searchKey.currentState?.handleMapTap();
     _globeController.setRotationSuspended(true);
@@ -204,6 +229,7 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final active = state == AppLifecycleState.resumed;
     _globeController.setAppActive(active);
+    if (active) unawaited(_newsAlertController.reconnect());
     if (!active) _searchKey.currentState?.dismissForBackground();
   }
 
@@ -218,9 +244,8 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
       ..dispose();
     _timelineLayers.dispose();
     _placeSearchController.dispose();
-    _newsAlertController
-      ..removeListener(_onNewsAlertChanged)
-      ..dispose();
+    _newsAlertController.removeListener(_onNewsAlertChanged);
+    if (widget.newsAlerts == null) _newsAlertController.dispose();
     unawaited(_notificationOpenedSubscription?.cancel());
     unawaited(_foregroundMessageSubscription?.cancel());
     super.dispose();
@@ -312,8 +337,9 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                       selectedBasemap: _globeController.basemap,
                       isBasemapBusy: _globeController.isChangingBasemap,
                       onBasemapSelected: _globeController.setBasemap,
-                      alertsEnabled: _newsAlertController.alert != null,
+                      alertsEnabled: _newsAlertController.notificationsEnabled,
                       onAlertsPressed: _showNewsAlerts,
+                      onAccountPressed: widget.onAccountPressed,
                     ),
                   ),
                 ),
@@ -328,6 +354,13 @@ class _GlobeWidgetState extends State<GlobeWidget> with WidgetsBindingObserver {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      FilledButton.tonalIcon(
+                        key: const Key('open-topic-search'),
+                        onPressed: _showTopicSearch,
+                        icon: const Icon(Icons.manage_search),
+                        label: const Text('Ask the news • 1-day demo'),
+                      ),
+                      const SizedBox(height: 8),
                       NewsViewToggle(
                         selected: _viewMode,
                         onSelected: _setViewMode,

@@ -28,6 +28,15 @@ class _Sender:
 
 
 class NewsAlertProcessorTests(unittest.TestCase):
+    @patch('news_alerts.processor.notification_headline', side_effect=RuntimeError('AI unavailable'))
+    def test_ai_failure_does_not_block_fcm_delivery(self, _):
+        repository = _Repository(self._alert())
+        sender = _Sender()
+        result = process_timeline_alerts([{'id': 'near', 'headline': 'Source headline',
+            'lat': 17.914, 'lon': 77.531}], datetime.now(timezone.utc), repository, sender)
+        self.assertEqual(result['sent'], 1)
+        self.assertEqual(sender.messages[0]['title'], 'Source headline')
+
     def _alert(self):
         return {
             "id": "a" * 32,

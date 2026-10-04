@@ -31,6 +31,20 @@ class NewsAlert {
 
   bool get usesCustomRadius => scope == NewsAlertScope.customRadius;
 
+  NewsAlert withEnabled(bool value) => NewsAlert(
+    latitude: latitude,
+    longitude: longitude,
+    locationLabel: locationLabel,
+    locationType: locationType,
+    scope: scope,
+    boundingBox: boundingBox,
+    radiusMeters: radiusMeters,
+    language: language,
+    mode: mode,
+    quietHoursEnabled: quietHoursEnabled,
+    enabled: value,
+  );
+
   Map<String, Object?> toJson() => {
     'center': {
       'type': 'Point',

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'article_details.dart';
 import 'article_language.dart';
+import '../network/bounded_http.dart';
 
 class ArticleDetailsApiException implements Exception {
   const ArticleDetailsApiException(this.message);
@@ -58,32 +59,33 @@ class ArticleDetailsApi implements ArticleDetailsClient {
         : baseUrl;
     final uri = Uri.parse('$root/api/article-details');
     final cityId = cityNewsIdFromArticleUri(articleUri);
-    if (language == ArticleLanguage.english && cityId != null) {
-      final cityDetails = await _fetchCityDetails(client, root, cityId);
-      if (cityDetails != null) {
-        if (identical(client, _activeClient)) _activeClient = null;
-        client.close();
-        return cityDetails;
-      }
-    }
-
     try {
-      final response = await client
-          .post(
-            uri,
-            headers: const {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'url': articleUri.toString(),
-              'language': language.code,
-            }),
-          )
-          .timeout(const Duration(seconds: 90));
+      if (language == ArticleLanguage.english && cityId != null) {
+        final cityDetails = await _fetchCityDetails(client, root, cityId);
+        if (cityDetails != null) {
+          if (identical(client, _activeClient)) _activeClient = null;
+          client.close();
+          return cityDetails;
+        }
+      }
+
+      final response = await boundedRequest(
+        client,
+        'POST',
+        uri,
+        headers: const {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'url': articleUri.toString(),
+          'language': language.code,
+        }),
+        timeout: const Duration(seconds: 65),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw const ArticleDetailsApiException(
-          'This article could not be summarized.',
+          'Summary unavailable. The publisher or summary service could not respond. Retry or open the original source.',
         );
       }
       final decoded = jsonDecode(response.body);
@@ -120,12 +122,13 @@ class ArticleDetailsApi implements ArticleDetailsClient {
     String cityId,
   ) async {
     try {
-      final response = await client
-          .get(
-            Uri.parse('$root/api/city-news/$cityId'),
-            headers: const {'Accept': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 12));
+      final response = await boundedRequest(
+        client,
+        'GET',
+        Uri.parse('$root/api/city-news/$cityId'),
+        headers: const {'Accept': 'application/json'},
+        timeout: const Duration(seconds: 3),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) return null;
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) return null;

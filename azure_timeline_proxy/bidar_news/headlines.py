@@ -37,6 +37,10 @@ def _unique_urls(records):
     seen = set()
     result = []
     for record in records:
+        if not isinstance(record, dict):
+            continue
+        if _clean_title(record.get('headline') or record.get('title')):
+            continue
         url = str(record.get('url') or '').strip()
         if url.startswith(('https://', 'http://')) and url not in seen:
             seen.add(url)

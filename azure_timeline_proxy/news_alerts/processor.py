@@ -70,10 +70,14 @@ def process_timeline_alerts(
             continue
 
         first = pending[0]
-        first["notificationHeadline"] = notification_headline(
-            first,
-            str(alert.get("language") or "en-US"),
-        )
+        try:
+            first["notificationHeadline"] = notification_headline(
+                first, str(alert.get("language") or "en-US"),
+            )
+        except Exception:
+            # Optional AI/caching must never prevent delivery of source news.
+            logging.warning("Headline enrichment unavailable; using source headline")
+            first["notificationHeadline"] = str(first.get("headline") or "News update")[:90]
         title, body = notification_copy(
             pending,
             str(alert.get("locationLabel") or "your area"),

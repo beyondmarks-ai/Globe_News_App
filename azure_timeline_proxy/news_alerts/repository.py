@@ -3,14 +3,13 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from azure.cosmos import CosmosClient, exceptions
+from azure.cosmos import exceptions
+from service_clients import cosmos_client
 
 
 class NewsAlertRepository:
     def __init__(self):
-        endpoint = os.environ["BIDAR_COSMOS_ENDPOINT"]
-        key = os.environ["BIDAR_COSMOS_KEY"]
-        client = CosmosClient(endpoint, credential=key)
+        client = cosmos_client()
         database = client.get_database_client(
             os.getenv("BIDAR_COSMOS_DATABASE", "gdelt_news")
         )

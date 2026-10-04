@@ -36,20 +36,33 @@ class NewsNotificationService {
   StreamSubscription<RemoteMessage>? _openedSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
   NewsNotificationAction? _initialAction;
+  DateTime? lastTestReceivedAt;
+  String? lastTestId;
+
+  void _recordTest(RemoteMessage message) {
+    if (message.data['test'] == 'true') {
+      lastTestReceivedAt = DateTime.now();
+      lastTestId = message.data['testId'];
+    }
+  }
 
   Stream<NewsNotificationAction> get opened => _openedController.stream;
   Stream<RemoteMessage> get foregroundMessages => _foregroundController.stream;
 
   Future<void> initialize() async {
-    _openedSubscription ??= FirebaseMessaging.onMessageOpenedApp.listen(
-      (message) =>
-          _openedController.add(NewsNotificationAction.fromMessage(message)),
-    );
-    _foregroundSubscription ??= FirebaseMessaging.onMessage.listen(
-      _foregroundController.add,
-    );
+    _openedSubscription ??= FirebaseMessaging.onMessageOpenedApp.listen((
+      message,
+    ) {
+      _recordTest(message);
+      _openedController.add(NewsNotificationAction.fromMessage(message));
+    });
+    _foregroundSubscription ??= FirebaseMessaging.onMessage.listen((message) {
+      _recordTest(message);
+      _foregroundController.add(message);
+    });
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null) {
+      _recordTest(initial);
       _initialAction = NewsNotificationAction.fromMessage(initial);
     }
   }

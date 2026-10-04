@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'timeline_news_item.dart';
 import 'timeline_selection.dart';
+import '../network/bounded_http.dart';
 
 class TimelineNewsApiException implements Exception {
   const TimelineNewsApiException(this.message);
@@ -14,9 +15,13 @@ class TimelineNewsApiException implements Exception {
 }
 
 class TimelineNewsApi {
-  TimelineNewsApi({required this.baseUrl});
+  TimelineNewsApi({
+    required this.baseUrl,
+    http.Client Function()? clientFactory,
+  }) : _clientFactory = clientFactory ?? http.Client.new;
 
   final String baseUrl;
+  final http.Client Function() _clientFactory;
   http.Client? _activeClient;
   bool _disposed = false;
 
@@ -37,7 +42,7 @@ class TimelineNewsApi {
     }
 
     _activeClient?.close();
-    final client = http.Client();
+    final client = _clientFactory();
     _activeClient = client;
     final root = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
@@ -53,9 +58,14 @@ class TimelineNewsApi {
 
     try {
       final cityFuture = _optionalGet(client, cityUri);
-      final response = await client
-          .get(timelineUri, headers: const {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 120));
+      final response = await boundedRequest(
+        client,
+        'GET',
+        timelineUri,
+        headers: const {'Accept': 'application/json'},
+        attempts: 2,
+        isActive: () => !_disposed && identical(client, _activeClient),
+      );
       final cityResponse = await cityFuture;
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw TimelineNewsApiException(
@@ -89,11 +99,15 @@ class TimelineNewsApi {
 
   Future<http.Response?> _optionalGet(http.Client client, Uri uri) async {
     try {
-      return await client
-          .get(uri, headers: const {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 20));
+      return await boundedRequest(
+        client,
+        'GET',
+        uri,
+        headers: const {'Accept': 'application/json'},
+        timeout: const Duration(seconds: 3),
+      );
     } catch (_) {
-      if (_disposed || !identical(client, _activeClient)) rethrow;
+      // This source is optional. Never leave its parallel failure unhandled.
       return null;
     }
   }
