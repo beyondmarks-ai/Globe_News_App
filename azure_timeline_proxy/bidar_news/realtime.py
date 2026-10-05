@@ -73,8 +73,14 @@ Known structured facts:
 def create_realtime_client_secret(
     document: dict, language_code: str = "auto", voice: str = "coral"
 ) -> dict:
-    endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
-    api_key = os.environ["AZURE_OPENAI_KEY"]
+    endpoint = (
+        os.environ.get("AZURE_OPENAI_REALTIME_ENDPOINT")
+        or os.environ["AZURE_OPENAI_ENDPOINT"]
+    ).rstrip("/")
+    api_key = (
+        os.environ.get("AZURE_OPENAI_REALTIME_KEY")
+        or os.environ["AZURE_OPENAI_KEY"]
+    )
     deployment = os.getenv(
         "AZURE_OPENAI_REALTIME_DEPLOYMENT", "gpt-realtime-1.5"
     )

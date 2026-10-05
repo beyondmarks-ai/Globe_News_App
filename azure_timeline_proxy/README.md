@@ -26,6 +26,7 @@ Azure Blob Storage by UTC slot.
 - `AZURE_OPENAI_CHAT_DEPLOYMENT`: chat deployment name
 - `NEWS_OPENAI_ENDPOINT`, `NEWS_OPENAI_KEY`, `NEWS_OPENAI_CHAT_DEPLOYMENT`: optional overrides used only for summaries/notification headlines, preserving other AI consumers
 - `AZURE_OPENAI_REALTIME_DEPLOYMENT`: realtime deployment name (defaults to `gpt-realtime-1.5`)
+- `AZURE_OPENAI_REALTIME_ENDPOINT`, `AZURE_OPENAI_REALTIME_KEY`: optional voice-only overrides for the Azure endpoint and key; use a Key Vault reference for the key in production
 - `NEWS_ALERTS_COSMOS_CONTAINER`: subscription container (defaults to `news_alerts`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: FCM v1 sender credential; production uses an Azure Key Vault reference
 - `FIREBASE_PROJECT_ID`: must match the mobile Firebase project (`globe-news-ecafc`)

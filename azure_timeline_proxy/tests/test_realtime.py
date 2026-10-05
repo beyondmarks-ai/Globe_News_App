@@ -53,7 +53,7 @@ class RealtimeNewsTests(unittest.TestCase):
                 "AZURE_OPENAI_KEY": "server-secret",
                 "AZURE_OPENAI_REALTIME_DEPLOYMENT": "gpt-realtime-1.5",
             },
-            clear=False,
+            clear=True,
         ):
             result = create_realtime_client_secret(
                 {"articleBody": "News"}, "ur-PK", "sage"
@@ -70,6 +70,47 @@ class RealtimeNewsTests(unittest.TestCase):
         )
         self.assertIn("Answer naturally in Urdu", kwargs["json"]["session"]["instructions"])
         self.assertNotIn("server-secret", result.values())
+
+    @patch("bidar_news.realtime.requests.post")
+    def test_voice_configuration_overrides_legacy_endpoint_and_key(self, post):
+        post.return_value.json.return_value = {"value": "short-lived"}
+        with patch.dict(
+            os.environ,
+            {
+                "AZURE_OPENAI_ENDPOINT": "https://retired.openai.azure.com",
+                "AZURE_OPENAI_KEY": "legacy-key",
+                "AZURE_OPENAI_REALTIME_ENDPOINT": "https://voice.openai.azure.com/",
+                "AZURE_OPENAI_REALTIME_KEY": "voice-key",
+                "AZURE_OPENAI_REALTIME_DEPLOYMENT": "globe-news-realtime",
+            },
+            clear=True,
+        ):
+            result = create_realtime_client_secret({"articleBody": "News"})
+        args, kwargs = post.call_args
+        self.assertEqual(
+            args[0], "https://voice.openai.azure.com/openai/v1/realtime/client_secrets"
+        )
+        self.assertEqual(kwargs["headers"]["api-key"], "voice-key")
+        self.assertEqual(kwargs["json"]["session"]["model"], "globe-news-realtime")
+        self.assertEqual(
+            result["webrtcUrl"],
+            "https://voice.openai.azure.com/openai/v1/realtime/calls?webrtcfilter=on",
+        )
+        self.assertNotIn("voice-key", result.values())
+
+    @patch("bidar_news.realtime.requests.post")
+    def test_voice_configuration_works_without_legacy_settings(self, post):
+        post.return_value.json.return_value = {"value": "short-lived"}
+        with patch.dict(
+            os.environ,
+            {
+                "AZURE_OPENAI_REALTIME_ENDPOINT": "https://voice.openai.azure.com",
+                "AZURE_OPENAI_REALTIME_KEY": "voice-key",
+            },
+            clear=True,
+        ):
+            result = create_realtime_client_secret({"articleBody": "News"})
+        self.assertEqual(result["token"], "short-lived")
 
 
 if __name__ == "__main__":

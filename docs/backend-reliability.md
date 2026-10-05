@@ -41,8 +41,41 @@ the existing Firebase Admin SDK account in `globe-news-ecafc` was stored directl
 in the separate `globe-news-fcm-service-account` Key Vault secret. No private key
 was saved locally, no IAM role grants were added, and the old secret was retained.
 
-Legacy voice/embedding configuration was not changed; its old endpoint/deployment
-settings need a separate review if those features are required.
+The summary correction initially left legacy voice/embedding configuration
+unchanged. Voice was repaired separately on 2026-10-05 as described below;
+legacy embedding settings still need a separate review.
+
+## Voice service repair (2026-10-05)
+
+`POST /api/talk-news/session` returned HTTP 502 because the shared
+`AZURE_OPENAI_ENDPOINT` still pointed at the non-resolving
+`rakesh.openai.azure.com` host. The app presented this as news being unavailable
+to talk about.
+
+The existing `guardian-ai-openai-617db5` resource now has a
+`globe-news-realtime` deployment of `gpt-realtime-1.5` version `2026-02-23`,
+using GlobalStandard capacity 1. Normal Azure inference usage is billable.
+Voice uses `AZURE_OPENAI_REALTIME_ENDPOINT` and `AZURE_OPENAI_REALTIME_KEY`;
+the key reuses the existing `globe-news-openai-key` Key Vault reference.
+`AZURE_OPENAI_REALTIME_DEPLOYMENT` selects `globe-news-realtime`. These overrides
+leave the summary and legacy embedding settings unchanged. Older installations
+can still fall back to `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_KEY`.
+
+Backend deployment `b7e010f0-fc4b-4d9f-8d5e-b6cd0fab75b1` succeeded. Post-deployment
+function requests temporarily stalled; the function app was stopped and started,
+and subsequent live checks succeeded. Verification:
+
+- All 82 backend tests passed, including voice override/fallback coverage.
+- Public voice session creation returned HTTP 200.
+- Azure WebRTC negotiation returned HTTP 201 and the data channel connected.
+- A real Jerusalem Post article produced an article-specific spoken response:
+  both the completed transcript and incoming audio were received.
+- The existing news-demo status route also returned HTTP 200 after recovery.
+
+The desktop WebRTC check follows the app's token/SDP/data-channel flow; physical
+Android microphone and speaker routing were not tested. No APK update is needed.
+Azure's `webrtcfilter=on` omits `response.done`; verification must wait for
+`response.output_audio_transcript.done`, which the mobile app already handles.
 
 ## Changes
 
