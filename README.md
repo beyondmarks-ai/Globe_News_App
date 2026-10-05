@@ -1,7 +1,7 @@
 # Globe News
 
 A Flutter application that presents geolocated timeline news on an interactive
-native 3D Earth using `mapbox_maps_flutter`.
+native 3D Earth using `mapbox_maps_flutter`. Current app version: `1.2.0+4`.
 
 ## Features
 
@@ -11,8 +11,12 @@ native 3D Earth using `mapbox_maps_flutter`.
 - IST timeline selection with 15-minute slots
 - Expandable place search with smooth camera flight
 - AI article summaries in English, Kannada, Hindi, and Urdu
+- "Talk to News" voice interaction with bounded realtime transport
 - Responsive news-detail popup with source links
 - City/state news notifications with optional radius and AI-refined grouped headlines
+- Firebase email/password accounts with per-user alert preferences
+- One-day "Ask the news" demo with date-aware background research and citations
+- Bounded HTTP clients, timeline caching, article enrichment, and retry-safe APIs
 - Public Azure Functions proxy with timeline caching and article enrichment
 
 ## Repository layout
@@ -20,22 +24,30 @@ native 3D Earth using `mapbox_maps_flutter`.
 ```text
 lib/
   article/             Article summary models, API, state and popup
+  auth/                Firebase sign-in, account gate and sign-out flow
+  news_demo/           Authenticated one-day news background demo
+  news_grid/           Headline grid and list presentation
+  notifications/       Area alert preferences and FCM registration
   place_search/        Geocoding model, API, state and expandable search
   timeline/            Timeline models, API, state and Mapbox layers
+  topic_search/        Topic search client and result presentation
   globe_widget.dart    Globe screen composition
   globe_map_controller.dart
 azure_timeline_proxy/  Python Azure Functions backend
+docs/                  Feature notes, deployment guidance and verification records
 test/                  Unit and widget tests
 ```
 
 ## Requirements
 
-- Flutter 3.38.7 (stable) with Dart 3.10.7
+- Flutter 3.38.7 or newer (stable)
+- Dart 3.10.7 or newer
 - Android SDK 21 or newer
 - A public Mapbox access token
 - A deployed instance of `azure_timeline_proxy`
 
-Only Android platform files are currently checked into this repository.
+Only Android platform files are currently checked into this repository. Firebase
+Authentication and Cloud Messaging are configured for the Android project.
 
 ## Local configuration
 
@@ -78,9 +90,27 @@ POST /api/article-details
 GET  /api/city-news/map?since=ISO-8601-UTC
 GET  /api/city-news/{id}
 GET, POST, DELETE /api/news-alerts
+GET  /api/news-demo/status
+POST /api/news-demo/ask
 ```
 
 The city-news feed currently ingests the authorized Vijaya Karnataka Bidar section every ten minutes through Service Bus. Location-verified stories are merged into the existing GPU-rendered Flutter dot source, while uncertain locations remain available in the backend without an invented globe coordinate.
+
+Area alerts use Firebase ID tokens and FCM registration. Users can select an
+administrative area or a 2–250 km radius, configure language, delivery mode and
+quiet hours, and send a device test from the account screen. Production FCM
+delivery also requires the Azure Function App's Firebase service-account and
+Cosmos settings; see [docs/accounts-and-alerts.md](docs/accounts-and-alerts.md).
+
+The "Ask the news" demo is an authenticated, bounded retrieval experience. It
+uses a server-owned request ID, a one-day activation window, shared quota and
+source-linked story sections. It is intentionally a constrained demonstration,
+not exhaustive historical search or a guarantee of factual completeness. See
+[docs/news-demo.md](docs/news-demo.md).
+
+The earlier full-archive topic-search prototype is disabled by default because
+it requires a dedicated search index. The route returns `404` unless explicitly
+enabled after the deployment gate in [docs/topic-search.md](docs/topic-search.md).
 
 Door Drishti OCR and YouTube ingestion are intentionally deferred.
 
@@ -119,6 +149,16 @@ flutter test --no-pub
 ```
 
 GitHub Actions runs the same checks on pushes to `main` and pull requests.
+
+Backend tests can be run from the proxy directory with Python and `pytest`:
+
+```sh
+cd azure_timeline_proxy
+python -m pytest
+```
+
+See [docs/backend-reliability.md](docs/backend-reliability.md) for the latest
+deployment checks and known operational caveats.
 
 ## Security
 
